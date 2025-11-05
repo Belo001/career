@@ -1,70 +1,60 @@
 import pool from '../db/connection.js';
 
 export const getOrders = (req, res) => {
-  console.log('🔍 [GET ORDERS] Starting database query...');
-  console.log('📋 [GET ORDERS] Pool state:', pool._closed ? 'CLOSED' : 'OPEN');
-  
-  // Test if pool is working
-  pool.getConnection((connErr, connection) => {
-    if (connErr) {
-      console.error('❌ [GET ORDERS] Pool connection error:', connErr);
+  pool.query('SELECT * FROM orders', (err, results) => {
+    if (err) {
+      console.error('Get orders error:', err.message);
       return res.status(500).json({ 
         success: false, 
-        error: 'Database connection failed',
-        details: connErr.message 
+        error: 'Database error' 
       });
     }
-    
-    console.log('✅ [GET ORDERS] Got connection from pool');
-    
-    connection.query('SELECT * FROM orders', (err, results) => {
-      // Always release the connection back to the pool
-      connection.release();
-      
-      if (err) {
-        console.error('❌ [GET ORDERS] Database query error:', err);
-        console.error('❌ [GET ORDERS] Error code:', err.code);
-        console.error('❌ [GET ORDERS] SQL State:', err.sqlState);
-        console.error('❌ [GET ORDERS] Full error:', err);
-        
-        return res.status(500).json({ 
-          success: false, 
-          error: 'Database query failed',
-          details: err.message,
-          code: err.code
-        });
-      }
-      
-      console.log(`✅ [GET ORDERS] Successfully fetched ${results.length} orders`);
-      res.json({ success: true, data: results });
-    });
+    res.json({ success: true, data: results });
   });
 };
 
-// Keep other functions but update them similarly...
 export const createOrder = (req, res) => {
   const { order_id, customer_name, product, quantity, order_date, status } = req.body;
   
-  pool.getConnection((connErr, connection) => {
-    if (connErr) {
-      console.error('❌ [CREATE ORDER] Pool connection error:', connErr);
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Database connection failed',
-        details: connErr.message 
-      });
-    }
-    
-    const sql = 'INSERT INTO orders (order_id, customer_name, product, quantity, order_date, status) VALUES (?, ?, ?, ?, ?, ?)';
-    
-    connection.query(sql, [order_id, customer_name, product, quantity, order_date, status], (err, result) => {
-      connection.release();
-      
-      if (err) {
-        console.error('❌ [CREATE ORDER] Error:', err);
-        return res.status(500).json({ success: false, error: 'Failed to create order', details: err.message });
-      }
-      res.json({ success: true, message: 'Order added', data: { id: result.insertId } });
+  if (!order_id || !customer_name || !product) {
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Missing required fields' 
     });
+  }
+
+  const sql = 'INSERT INTO orders (order_id, customer_name, product, quantity, order_date, status) VALUES (?, ?, ?, ?, ?, ?)';
+  
+  pool.query(sql, [order_id, customer_name, product, quantity, order_date, status], (err, result) => {
+    if (err) {
+      console.error('Create order error:', err.message);
+      return res.status(500).json({ success: false, error: 'Failed to create order' });
+    }
+    res.json({ success: true, message: 'Order added' });
+  });
+};
+
+export const updateOrder = (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  
+  pool.query('UPDATE orders SET status = ? WHERE order_id = ?', [status, id], (err, result) => {
+    if (err) {
+      console.error('Update order error:', err.message);
+      return res.status(500).json({ success: false, error: 'Failed to update order' });
+    }
+    res.json({ success: true, message: 'Order updated' });
+  });
+};
+
+export const deleteOrder = (req, res) => {
+  const { id } = req.params;
+  
+  pool.query('DELETE FROM orders WHERE order_id = ?', [id], (err, result) => {
+    if (err) {
+      console.error('Delete order error:', err.message);
+      return res.status(500).json({ success: false, error: 'Failed to delete order' });
+    }
+    res.json({ success: true, message: 'Order deleted' });
   });
 };
