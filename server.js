@@ -5,7 +5,13 @@ import pool from './db/connection.js';
 
 const app = express();
 
-// Middleware
+console.log('🚀 Starting Bakery API Server...');
+console.log('📋 Environment check:', {
+  PORT: process.env.PORT,
+  MYSQLHOST: process.env.MYSQLHOST ? 'Set' : 'Missing',
+  MYSQLDATABASE: process.env.MYSQLDATABASE
+});
+
 app.use(cors());
 app.use(express.json());
 
