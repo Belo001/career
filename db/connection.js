@@ -3,27 +3,30 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-console.log('🔌 Setting up database connection...');
+console.log('🔌 Setting up database connection for Railway...');
 
-// Simple connection without complex options
+// Use Railway's environment variables directly
 const pool = mysql.createPool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 3306,
+  host: process.env.MYSQLHOST,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE,
+  port: process.env.MYSQLPORT || 3306,
   waitForConnections: true,
-  connectionLimit: 5, // Reduced for stability
-  acquireTimeout: 30000,
-  timeout: 30000
+  connectionLimit: 10,
+  queueLimit: 0,
+  acquireTimeout: 60000,
+  timeout: 60000,
+  charset: 'utf8mb4'
 });
 
-// Simple connection test
+// Test connection
 pool.getConnection((err, connection) => {
   if (err) {
     console.error('❌ Database connection failed:', err.message);
   } else {
-    console.log('✅ Database connected successfully');
+    console.log('✅ Connected to MySQL on Railway');
+    console.log('📊 Database:', process.env.MYSQLDATABASE);
     connection.release();
   }
 });
