@@ -55,6 +55,37 @@ const initializeDatabase = () => {
   });
 };
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  pool.getConnection((err, connection) => {
+    if (err) {
+      return res.status(500).json({ 
+        status: 'error', 
+        database: 'disconnected',
+        error: err.message 
+      });
+    }
+    
+    connection.query('SELECT 1 as test', (queryErr, results) => {
+      connection.release();
+      
+      if (queryErr) {
+        return res.status(500).json({ 
+          status: 'error', 
+          database: 'connected but query failed',
+          error: queryErr.message 
+        });
+      }
+      
+      res.json({ 
+        status: 'healthy', 
+        database: 'connected',
+        timestamp: new Date().toISOString()
+      });
+    });
+  });
+});
+
 // Routes
 app.get('/', (req, res) => {
   res.json({ 
