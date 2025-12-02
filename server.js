@@ -24,6 +24,10 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+testConnection().then(() => {
+  console.log('🎉 Database initialization complete!');
+});
+
 // Test database connection (but don't crash if it fails)
 testConnection().catch(() => {
   console.log('⚠️ Database check completed (may have failed)');
