@@ -295,5 +295,94 @@ if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') {
   });
 }
 
+// ============================================
+// AUTO-SETUP ON STARTUP (for Railway)
+// ============================================
+const initializeDatabase = async () => {
+  console.log('\n🔧 AUTO-SETUP: Checking database tables...');
+  
+  try {
+    const connection = await pool.getConnection();
+    
+    // Just check if users table exists
+    const [tables] = await connection.query(`
+      SELECT COUNT(*) as count 
+      FROM information_schema.tables 
+      WHERE table_schema = 'railway' 
+      AND table_name = 'users'
+    `);
+    
+    if (tables[0].count === 0) {
+      console.log('📦 No tables found. Creating essential tables...');
+      
+      // Create ONLY the essential tables
+      const essentialTables = [
+        `CREATE TABLE users (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          user_type ENUM('student', 'institute', 'admin') NOT NULL,
+          is_verified BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_email (email)
+        )`,
+        
+        `CREATE TABLE institutes (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          user_id INT,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          location VARCHAR(255),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        
+        `CREATE TABLE students (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          user_id INT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`,
+        
+        `CREATE TABLE applications (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          student_id INT,
+          course_id INT,
+          status ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`
+      ];
+      
+      for (const sql of essentialTables) {
+        await connection.query(sql);
+      }
+      
+      console.log('✅ Essential tables created!');
+      
+      // Add default admin
+      await connection.query(`
+        INSERT IGNORE INTO users (name, email, password, user_type, is_verified) 
+        VALUES ('System Admin', 'admin@careerguide.com', '$2a$10$0987654321', 'admin', TRUE)
+      `);
+      
+      console.log('✅ Default admin created');
+    } else {
+      console.log('✅ Database already has tables');
+    }
+    
+    connection.release();
+    console.log('🎉 Database initialization complete!');
+    
+  } catch (error) {
+    console.log('⚠️ Auto-setup skipped (tables may already exist):', error.message);
+  }
+};
+
+// Run auto-setup when imported
+if (typeof process !== 'undefined') {
+  setTimeout(() => {
+    initializeDatabase().catch(() => {});
+  }, 2000); // Wait 2 seconds after server starts
+}
+
 // Export pool
 export { pool };
