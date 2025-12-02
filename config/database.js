@@ -3,7 +3,22 @@ import { config } from 'dotenv';
 config();
 
 const getDbConfig = () => {
-  // Railway provides DATABASE_URL
+  // Option 1: Use individual Railway variables
+  if (process.env.DB_HOST && process.env.NODE_ENV === 'production') {
+    console.log('🚂 Using Railway MySQL internal connection');
+    return {
+      host: process.env.DB_HOST || 'mysql.railway.internal',
+      port: process.env.DB_PORT || 3306,
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'railway',
+      waitForConnections: true,
+      connectionLimit: 10,
+      queueLimit: 0
+    };
+  }
+  
+  // Option 2: Use DATABASE_URL
   if (process.env.DATABASE_URL) {
     console.log('🌐 Using Railway DATABASE_URL');
     const url = new URL(process.env.DATABASE_URL);
@@ -13,22 +28,6 @@ const getDbConfig = () => {
       user: url.username,
       password: url.password,
       database: url.pathname.substring(1),
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0,
-      ssl: { rejectUnauthorized: false }
-    };
-  }
-  
-  // Railway also provides individual variables
-  if (process.env.DB_HOST && process.env.NODE_ENV === 'production') {
-    console.log('🚂 Using Railway MySQL individual config');
-    return {
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT || 3306,
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'railway',
       waitForConnections: true,
       connectionLimit: 10,
       queueLimit: 0,
@@ -59,12 +58,12 @@ export const testConnection = async () => {
     const connection = await pool.getConnection();
     console.log('✅ Database connected successfully');
     console.log(`📊 Database: ${getDbConfig().database}`);
-    console.log(`🌐 Host: ${getDbConfig().host}`);
+    console.log(`🌐 Host: ${getDbConfig().host}:${getDbConfig().port}`);
     connection.release();
     return true;
   } catch (error) {
     console.error('❌ Database connection failed:', error.message);
-    console.log('⚠️ App will start without database connection...');
+    console.error('Full error:', error);
     return false;
   }
 };
