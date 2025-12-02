@@ -24,12 +24,15 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Test database connection
-testConnection().then(() => {
-  console.log('🎉 Database initialization complete!');
-}).catch(() => {
-  console.log('⚠️ Database check completed');
-});
+// After middleware, before routes:
+console.log('🚀 Server starting...');
+
+// Initialize database (non-blocking)
+import('./config/database.js').then(module => {
+  if (module.initializeDatabase) {
+    module.initializeDatabase();
+  }
+}).catch(() => {});
 
 // Routes
 app.use('/api/auth', authRoutes);
