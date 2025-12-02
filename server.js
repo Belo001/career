@@ -28,11 +28,13 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(morgan('combined'));
+app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Test database connection on startup
+console.log('\n🚀 STARTING SERVER...');
+console.log('=====================');
 testConnection();
 
 // Routes
@@ -47,7 +49,8 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     message: 'Career Guidance API is running',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
@@ -58,6 +61,7 @@ app.get('/api/test', (req, res) => {
     message: 'All routes are working!',
     data: { 
       version: '1.0.0',
+      environment: process.env.NODE_ENV || 'development',
       routes: ['auth', 'institutes', 'students', 'applications', 'admin']
     }
   });
@@ -80,7 +84,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler - MUST be after all routes
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -115,8 +119,10 @@ app.use((error, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📚 Career Guidance Platform API`);
+  console.log(`✅ Server running on port ${PORT}`);
   console.log(`📍 Host: 0.0.0.0 (Railway compatible)`);
-  console.log(`🔗 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`📚 API: http://localhost:${PORT}`);
+  console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
+  console.log('=====================\n');
 });
