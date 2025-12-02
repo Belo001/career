@@ -24,15 +24,13 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// After middleware, before routes:
+// In server.js, after middleware:
 console.log('🚀 Server starting...');
 
-// Initialize database (non-blocking)
-import('./config/database.js').then(module => {
-  if (module.initializeDatabase) {
-    module.initializeDatabase();
-  }
-}).catch(() => {});
+// Import and trigger database setup
+import('./config/database.js').then(() => {
+  console.log('✅ Database module loaded');
+}).catch(console.error);
 
 // Routes
 app.use('/api/auth', authRoutes);
