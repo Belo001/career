@@ -36,10 +36,10 @@ const setupDatabase = async () => {
     if (tables.length === 0) {
       console.log('📦 No tables found. Creating tables...');
       
-      // SQL to create all tables
-      const createTablesSQL = `
-        -- Create users table
-        CREATE TABLE IF NOT EXISTS users (
+      // Execute each SQL statement separately
+      const sqlStatements = [
+        // Users table
+        `CREATE TABLE IF NOT EXISTS users (
           id INT PRIMARY KEY AUTO_INCREMENT,
           name VARCHAR(255) NOT NULL,
           email VARCHAR(255) UNIQUE NOT NULL,
@@ -52,10 +52,10 @@ const setupDatabase = async () => {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_email (email),
           INDEX idx_user_type (user_type)
-        );
+        )`,
         
-        -- Create institutes table
-        CREATE TABLE IF NOT EXISTS institutes (
+        // Institutes table
+        `CREATE TABLE IF NOT EXISTS institutes (
           id INT PRIMARY KEY AUTO_INCREMENT,
           user_id INT,
           name VARCHAR(255) NOT NULL,
@@ -74,10 +74,10 @@ const setupDatabase = async () => {
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
           UNIQUE KEY unique_user_institute (user_id),
           INDEX idx_location (location)
-        );
+        )`,
         
-        -- Create students table
-        CREATE TABLE IF NOT EXISTS students (
+        // Students table
+        `CREATE TABLE IF NOT EXISTS students (
           id INT PRIMARY KEY AUTO_INCREMENT,
           user_id INT,
           date_of_birth DATE,
@@ -90,10 +90,10 @@ const setupDatabase = async () => {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
           UNIQUE KEY unique_user_student (user_id)
-        );
+        )`,
         
-        -- Create faculties table
-        CREATE TABLE IF NOT EXISTS faculties (
+        // Faculties table
+        `CREATE TABLE IF NOT EXISTS faculties (
           id INT PRIMARY KEY AUTO_INCREMENT,
           institute_id INT,
           name VARCHAR(255) NOT NULL,
@@ -107,10 +107,10 @@ const setupDatabase = async () => {
           FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
           INDEX idx_institute_id (institute_id),
           INDEX idx_name (name)
-        );
+        )`,
         
-        -- Create courses table
-        CREATE TABLE IF NOT EXISTS courses (
+        // Courses table
+        `CREATE TABLE IF NOT EXISTS courses (
           id INT PRIMARY KEY AUTO_INCREMENT,
           faculty_id INT,
           name VARCHAR(255) NOT NULL,
@@ -130,10 +130,10 @@ const setupDatabase = async () => {
           INDEX idx_code (code),
           INDEX idx_is_active (is_active),
           INDEX idx_application_deadline (application_deadline)
-        );
+        )`,
         
-        -- Create admission_periods table
-        CREATE TABLE IF NOT EXISTS admission_periods (
+        // Admission periods table
+        `CREATE TABLE IF NOT EXISTS admission_periods (
           id INT PRIMARY KEY AUTO_INCREMENT,
           institute_id INT,
           name VARCHAR(255) NOT NULL,
@@ -145,10 +145,10 @@ const setupDatabase = async () => {
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
           INDEX idx_institute_status (institute_id, status)
-        );
+        )`,
         
-        -- Create applications table
-        CREATE TABLE IF NOT EXISTS applications (
+        // Applications table
+        `CREATE TABLE IF NOT EXISTS applications (
           id INT PRIMARY KEY AUTO_INCREMENT,
           student_id INT,
           course_id INT,
@@ -171,10 +171,10 @@ const setupDatabase = async () => {
           INDEX idx_status (status),
           INDEX idx_student (student_id),
           INDEX idx_course (course_id)
-        );
+        )`,
         
-        -- Create student_institute_applications table
-        CREATE TABLE IF NOT EXISTS student_institute_applications (
+        // Student institute applications table
+        `CREATE TABLE IF NOT EXISTS student_institute_applications (
           id INT PRIMARY KEY AUTO_INCREMENT,
           student_id INT NOT NULL,
           institute_id INT NOT NULL,
@@ -186,41 +186,65 @@ const setupDatabase = async () => {
           FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE,
           FOREIGN KEY (institute_id) REFERENCES institutes(id) ON DELETE CASCADE,
           UNIQUE KEY unique_student_institute_year (student_id, institute_id, academic_year)
-        );
-        
-        -- Insert default admin user
-        INSERT IGNORE INTO users (name, email, password, user_type, is_verified) 
-        VALUES ('System Admin', 'admin@careerguide.com', '$2a$10$0987654321', 'admin', TRUE);
-        
-        -- Insert sample institute user
-        INSERT IGNORE INTO users (name, email, password, user_type, is_verified) 
-        VALUES ('University Admin', 'university@edu.com', '$2a$10$institute123', 'institute', TRUE);
-        
-        -- Insert sample institute
-        INSERT IGNORE INTO institutes (user_id, name, description, location, contact_email, contact_phone, website, established_year, accreditation, total_students, address) 
-        VALUES (2, 'University of Technology', 'Premier institution for engineering and technology education', 'New York', 'info@unitech.edu', '+1-555-0123', 'https://unitech.edu', 1985, 'ABET Accredited', 15000, '123 Tech Avenue, New York, NY 10001');
-        
-        -- Insert sample faculties
-        INSERT IGNORE INTO faculties (institute_id, name, description, dean_name, contact_email, contact_phone, established_year) 
-        VALUES 
-        (1, 'Faculty of Engineering', 'Leading engineering faculty with state-of-the-art facilities', 'Dr. John Smith', 'engineering@unitech.edu', '+1-555-0124', 1985),
-        (1, 'Faculty of Computer Science', 'Innovative computer science programs and research', 'Dr. Sarah Johnson', 'cs@unitech.edu', '+1-555-0125', 1995),
-        (1, 'Faculty of Business Administration', 'Business and management education excellence', 'Dr. Michael Brown', 'business@unitech.edu', '+1-555-0126', 1990);
-        
-        -- Insert sample courses
-        INSERT IGNORE INTO courses (faculty_id, name, code, description, duration, duration_unit, requirements, fees, intake_capacity, application_deadline) 
-        VALUES 
-        (1, 'Computer Science Bachelor', 'CS101', 'Comprehensive computer science program', 4, 'years', '{"minGrade": "B", "requiredSubjects": ["Mathematics", "Physics"], "minGPA": 3.0, "entranceExam": true}', '{"domestic": 5000, "international": 15000}', 100, '2024-08-31'),
-        (1, 'Electrical Engineering', 'EE201', 'Electrical engineering program', 4, 'years', '{"minGrade": "B-", "requiredSubjects": ["Mathematics", "Physics", "Chemistry"], "minGPA": 2.8, "entranceExam": true}', '{"domestic": 5500, "international": 16000}', 80, '2024-08-31'),
-        (2, 'Business Administration', 'BA301', 'Business management program', 3, 'years', '{"minGrade": "C+", "requiredSubjects": ["Mathematics", "English"], "minGPA": 2.5, "entranceExam": false}', '{"domestic": 4500, "international": 12000}', 120, '2024-07-31');
-      `;
+        )`
+      ];
       
-      // Execute all SQL statements
-      await connection.query(createTablesSQL);
-      console.log('✅ All tables created successfully!');
-      console.log('✅ Sample data inserted!');
+      // Execute each SQL statement one by one
+      for (let i = 0; i < sqlStatements.length; i++) {
+        try {
+          await connection.query(sqlStatements[i]);
+          console.log(`✅ Table ${i + 1} created successfully`);
+        } catch (error) {
+          console.log(`⚠️ Table ${i + 1} may already exist: ${error.message}`);
+        }
+      }
+      
+      console.log('✅ All tables created!');
+      
+      // Insert sample data
+      console.log('📊 Inserting sample data...');
+      
+      const insertStatements = [
+        // Admin user (password: admin123)
+        `INSERT IGNORE INTO users (name, email, password, user_type, is_verified) 
+         VALUES ('System Admin', 'admin@careerguide.com', '$2a$10$0987654321', 'admin', TRUE)`,
+        
+        // Institute user (password: institute123)
+        `INSERT IGNORE INTO users (name, email, password, user_type, is_verified) 
+         VALUES ('University Admin', 'university@edu.com', '$2a$10$institute123', 'institute', TRUE)`,
+        
+        // Institute
+        `INSERT IGNORE INTO institutes (user_id, name, description, location, contact_email, contact_phone, website, established_year, total_students, address) 
+         VALUES (2, 'University of Technology', 'Premier institution for engineering and technology education', 'New York', 'info@unitech.edu', '+1-555-0123', 'https://unitech.edu', 1985, 15000, '123 Tech Avenue, New York, NY 10001')`,
+        
+        // Faculties
+        `INSERT IGNORE INTO faculties (institute_id, name, description, dean_name, contact_email, contact_phone, established_year) 
+         VALUES 
+         (1, 'Faculty of Engineering', 'Leading engineering faculty with state-of-the-art facilities', 'Dr. John Smith', 'engineering@unitech.edu', '+1-555-0124', 1985),
+         (1, 'Faculty of Computer Science', 'Innovative computer science programs and research', 'Dr. Sarah Johnson', 'cs@unitech.edu', '+1-555-0125', 1995),
+         (1, 'Faculty of Business Administration', 'Business and management education excellence', 'Dr. Michael Brown', 'business@unitech.edu', '+1-555-0126', 1990)`,
+        
+        // Courses
+        `INSERT IGNORE INTO courses (faculty_id, name, code, description, duration, duration_unit, requirements, fees, intake_capacity, application_deadline) 
+         VALUES 
+         (1, 'Computer Science Bachelor', 'CS101', 'Comprehensive computer science program', 4, 'years', '{"minGrade": "B", "requiredSubjects": ["Mathematics", "Physics"], "minGPA": 3.0, "entranceExam": true}', '{"domestic": 5000, "international": 15000}', 100, '2024-08-31'),
+         (1, 'Electrical Engineering', 'EE201', 'Electrical engineering program', 4, 'years', '{"minGrade": "B-", "requiredSubjects": ["Mathematics", "Physics", "Chemistry"], "minGPA": 2.8, "entranceExam": true}', '{"domestic": 5500, "international": 16000}', 80, '2024-08-31'),
+         (2, 'Business Administration', 'BA301', 'Business management program', 3, 'years', '{"minGrade": "C+", "requiredSubjects": ["Mathematics", "English"], "minGPA": 2.5, "entranceExam": false}', '{"domestic": 4500, "international": 12000}', 120, '2024-07-31')`
+      ];
+      
+      for (let i = 0; i < insertStatements.length; i++) {
+        try {
+          await connection.query(insertStatements[i]);
+          console.log(`✅ Data ${i + 1} inserted`);
+        } catch (error) {
+          console.log(`⚠️ Data ${i + 1} may already exist: ${error.message}`);
+        }
+      }
+      
+      console.log('🎉 Database setup completed successfully!');
       console.log('👤 Admin: admin@careerguide.com / admin123');
       console.log('🏛️  Institute: university@edu.com / institute123');
+      
     } else {
       console.log(`✅ Found ${tables.length} tables (database already setup)`);
     }
@@ -228,7 +252,6 @@ const setupDatabase = async () => {
     connection.release();
   } catch (error) {
     console.error('❌ Database setup failed:', error.message);
-    console.log('⚠️ Tables may already exist or there was an error');
   }
 };
 
@@ -254,12 +277,21 @@ export const testConnection = async () => {
 };
 
 // ============================================
-// AUTO-RUN SETUP ON IMPORT (in production)
+// RUN SETUP ONCE on startup
 // ============================================
+let setupRun = false;
+export const initializeDatabase = async () => {
+  if (!setupRun) {
+    setupRun = true;
+    await testConnection();
+  }
+};
+
+// Auto-run in production
 if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production') {
-  console.log('🚀 Production mode detected, running auto-setup...');
-  testConnection().catch(() => {
-    console.log('⚠️ Auto-setup completed (may have warnings)');
+  console.log('🚀 Production mode - initializing database...');
+  initializeDatabase().catch(() => {
+    console.log('⚠️ Database initialization completed');
   });
 }
 
