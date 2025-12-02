@@ -2,8 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import { config } from 'dotenv';
-config();
 
 import { testConnection } from './config/database.js';
 
@@ -19,23 +17,17 @@ const app = express();
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:5174', 
-    'http://localhost:5173', 
-    'http://127.0.0.1:5174',  
-    'http://127.0.0.1:5173'
-  ],
+  origin: '*', // Allow all for now
   credentials: true
 }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Test database connection on startup
-console.log('\n🚀 STARTING SERVER...');
-console.log('=====================');
-testConnection();
+// Test database connection (but don't crash if it fails)
+testConnection().catch(() => {
+  console.log('⚠️ Database check completed (may have failed)');
+});
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -44,26 +36,13 @@ app.use('/api/students', studentRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health check route
+// Health check (works even without database)
 app.get('/api/health', (req, res) => {
-  res.status(200).json({
+  res.json({
     status: 'OK',
     message: 'Career Guidance API is running',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// Test route
-app.get('/api/test', (req, res) => {
-  res.json({ 
-    success: true,
-    message: 'All routes are working!',
-    data: { 
-      version: '1.0.0',
-      environment: process.env.NODE_ENV || 'development',
-      routes: ['auth', 'institutes', 'students', 'applications', 'admin']
-    }
+    database: 'checking...'
   });
 });
 
@@ -71,16 +50,16 @@ app.get('/api/test', (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     message: 'Career Guidance Platform API',
-    status: 'operational',
     version: '1.0.0',
-    endpoints: {
-      health: '/api/health',
-      auth: '/api/auth',
-      institutes: '/api/institutes',
-      students: '/api/students',
-      applications: '/api/applications',
-      admin: '/api/admin'
-    }
+    status: 'operational',
+    endpoints: [
+      '/api/health',
+      '/api/auth',
+      '/api/institutes',
+      '/api/students',
+      '/api/applications',
+      '/api/admin'
+    ]
   });
 });
 
@@ -92,37 +71,19 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler
+// Error handler
 app.use((error, req, res, next) => {
-  console.error('Global error handler:', error);
-  
-  if (error.code === 'ER_DUP_ENTRY') {
-    return res.status(409).json({
-      success: false,
-      message: 'Duplicate entry found'
-    });
-  }
-  
-  if (error.code === 'ECONNREFUSED' || error.code === 'PROTOCOL_CONNECTION_LOST') {
-    return res.status(503).json({
-      success: false,
-      message: 'Database connection error'
-    });
-  }
-
-  res.status(error.status || 500).json({
+  console.error('Error:', error);
+  res.status(500).json({
     success: false,
-    message: error.message || 'Internal server error'
+    message: 'Internal server error'
   });
 });
 
-const PORT = process.env.PORT || 5000;
-
+const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
-  console.log(`📍 Host: 0.0.0.0 (Railway compatible)`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📚 API: http://localhost:${PORT}`);
+  console.log(`📍 Host: 0.0.0.0`);
+  console.log(`🌐 URL: http://localhost:${PORT}`);
   console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
-  console.log('=====================\n');
 });
