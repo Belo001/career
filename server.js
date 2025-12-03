@@ -2,152 +2,245 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import mysql from 'mysql2/promise'; // ✅ DATABASE INCLUDED HERE
+import mysql from 'mysql2/promise';
 
 const app = express();
 
-// Get current directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// ============================================
-// DATABASE SETUP (INCLUDED IN SERVER.JS)
-// ============================================
-console.log('🚀 DATABASE SETUP FOR RAILWAY');
-
-const dbConfig = {
-  host: 'mysql.railway.internal',
-  port: 3306,
-  user: 'root',
-  password: 'tSVIRWsFKyujfCKvkIxgGRTLFXsjFDiS',
-  database: 'railway',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-};
-
-console.log('📊 Using Railway MySQL:');
-console.log(`   Host: ${dbConfig.host}:${dbConfig.port}`);
-console.log(`   Database: ${dbConfig.database}`);
-console.log(`   User: ${dbConfig.user}`);
-
-const pool = mysql.createPool(dbConfig);
-
-// Database initialization
-const initializeDatabase = async () => {
-  console.log('\n🔧 Initializing database...');
-  try {
-    const connection = await pool.getConnection();
-    console.log('✅ Database connected!');
-    
-    // Check if users table exists
-    const [tables] = await connection.query("SHOW TABLES LIKE 'users'");
-    
-    if (tables.length === 0) {
-      console.log('📦 Creating essential tables...');
-      
-      // Create essential tables
-      const createTables = [
-        `CREATE TABLE users (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          name VARCHAR(255) NOT NULL,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          user_type ENUM('student', 'institute', 'admin') NOT NULL,
-          is_verified BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE institutes (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          user_id INT,
-          name VARCHAR(255) NOT NULL,
-          description TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE students (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          user_id INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE applications (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          student_id INT,
-          course_id INT,
-          status ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`
-      ];
-      
-      for (const sql of createTables) {
-        await connection.query(sql);
-      }
-      
-      console.log('✅ Tables created!');
-    } else {
-      console.log('✅ Database already has tables');
-    }
-    
-    connection.release();
-  } catch (error) {
-    console.log('⚠️ Database init:', error.message);
-  }
-};
-
-// ============================================
-// MIDDLEWARE
-// ============================================
-app.use(helmet({ contentSecurityPolicy: false }));
+// Middleware
+app.use(helmet());
 app.use(cors({ origin: '*', credentials: true }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+console.log('🚀 SERVER STARTING DEBUG VERSION');
 
 // ============================================
-// SIMPLE ROUTES (NO SEPARATE CONTROLLERS NEEDED)
+// DATABASE DEBUG FUNCTION
 // ============================================
-
-// Health check
-app.get('/api/health', async (req, res) => {
+const debugDatabase = async () => {
+  console.log('\n🔍 DEBUGGING DATABASE CONNECTION...');
+  
+  const dbConfig = {
+    host: 'mysql.railway.internal',
+    port: 3306,
+    user: 'root',
+    password: 'tSVIRWsFKyujfCKvkIxgGRTLFXsjFDiS',
+    database: 'railway',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+  };
+  
+  console.log('📊 Trying to connect with:', {
+    host: dbConfig.host,
+    port: dbConfig.port,
+    database: dbConfig.database,
+    user: dbConfig.user
+  });
+  
   try {
+    const pool = mysql.createPool(dbConfig);
     const connection = await pool.getConnection();
+    console.log('✅ DATABASE CONNECTED SUCCESSFULLY!');
+    
+    // 1. Show ALL databases
+    const [dbs] = await connection.query('SHOW DATABASES');
+    console.log('\n📚 ALL DATABASES:');
+    dbs.forEach(db => console.log('   -', Object.values(db)[0]));
+    
+    // 2. Show tables in 'railway' database
+    console.log('\n📋 CHECKING TABLES IN "railway" DATABASE:');
     const [tables] = await connection.query('SHOW TABLES');
+    console.log(`   Found ${tables.length} tables`);
+    
+    if (tables.length === 0) {
+      console.log('\n❌ NO TABLES FOUND! Creating essential tables...');
+      
+      // Create simple users table
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          user_type ENUM('student', 'institute', 'admin') NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ Created "users" table');
+      
+      // Create other essential tables
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS institutes (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          user_id INT,
+          name VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('✅ Created "institutes" table');
+      
+      // Add admin user
+      await connection.query(`
+        INSERT IGNORE INTO users (name, email, password, user_type) 
+        VALUES ('Admin', 'admin@test.com', 'password123', 'admin')
+      `);
+      console.log('✅ Added admin user: admin@test.com / password123');
+      
+    } else {
+      console.log('\n📊 TABLES FOUND:');
+      tables.forEach(table => {
+        console.log('   -', Object.values(table)[0]);
+      });
+      
+      // Show sample data from users table
+      try {
+        const [users] = await connection.query('SELECT * FROM users LIMIT 3');
+        console.log('\n👤 SAMPLE USERS (first 3):');
+        users.forEach(user => {
+          console.log(`   - ${user.name} (${user.email}) - ${user.user_type}`);
+        });
+      } catch (e) {
+        console.log('⚠️ Could not read users table:', e.message);
+      }
+    }
+    
+    connection.release();
+    console.log('\n🎉 DATABASE DEBUG COMPLETE!');
+    return pool;
+    
+  } catch (error) {
+    console.error('\n❌ DATABASE CONNECTION FAILED:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error details:', error);
+    return null;
+  }
+};
+
+// Run database debug on startup
+let dbPool = null;
+debugDatabase().then(pool => {
+  dbPool = pool;
+  console.log('\n✅ Database initialization complete!');
+}).catch(err => {
+  console.log('\n⚠️ Database debug failed:', err.message);
+});
+
+// ============================================
+// ROUTES
+// ============================================
+
+// Health check with DB status
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'unknown';
+  let tableCount = 0;
+  
+  if (dbPool) {
+    try {
+      const connection = await dbPool.getConnection();
+      const [tables] = await connection.query('SHOW TABLES');
+      tableCount = tables.length;
+      connection.release();
+      dbStatus = 'connected';
+    } catch (error) {
+      dbStatus = 'error';
+    }
+  } else {
+    dbStatus = 'not_connected';
+  }
+  
+  res.json({
+    status: 'OK',
+    message: 'Career Guidance API Debug Version',
+    timestamp: new Date().toISOString(),
+    database: {
+      status: dbStatus,
+      tables: tableCount,
+      url: 'mysql.railway.internal:3306/railway'
+    }
+  });
+});
+
+// Test database directly
+app.get('/api/debug/db', async (req, res) => {
+  if (!dbPool) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database not connected'
+    });
+  }
+  
+  try {
+    const connection = await dbPool.getConnection();
+    
+    // Get all tables
+    const [tables] = await connection.query('SHOW TABLES');
+    
+    // Get table details
+    const tableDetails = [];
+    for (const table of tables) {
+      const tableName = Object.values(table)[0];
+      const [columns] = await connection.query(`DESCRIBE ${tableName}`);
+      tableDetails.push({
+        name: tableName,
+        columns: columns.length,
+        columnNames: columns.map(col => col.Field)
+      });
+    }
+    
     connection.release();
     
     res.json({
-      status: 'OK',
-      message: 'Career Guidance Platform',
-      timestamp: new Date().toISOString(),
-      database: 'connected',
+      success: true,
       tables: tables.length,
-      version: '1.0.0'
+      tableDetails: tableDetails
     });
+    
   } catch (error) {
-    res.json({
-      status: 'OK',
-      message: 'Career Guidance Platform',
-      timestamp: new Date().toISOString(),
-      database: 'disconnected',
+    res.status(500).json({
+      success: false,
+      message: 'Database error',
       error: error.message
     });
   }
 });
 
-// Register user
-app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password, userType } = req.body;
+// Test user registration
+app.post('/api/debug/register', async (req, res) => {
+  if (!dbPool) {
+    return res.status(503).json({
+      success: false,
+      message: 'Database not connected'
+    });
+  }
+  
+  const { name = 'Test User', email = `test${Date.now()}@example.com`, password = 'password123' } = req.body;
   
   try {
-    const connection = await pool.getConnection();
+    const connection = await dbPool.getConnection();
     
-    // Simple insert
-    const [result] = await connection.query(
+    // Check if users table exists
+    const [tables] = await connection.query("SHOW TABLES LIKE 'users'");
+    
+    if (tables.length === 0) {
+      // Create users table
+      await connection.query(`
+        CREATE TABLE users (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          user_type ENUM('student', 'institute', 'admin') DEFAULT 'student',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+    }
+    
+    // Insert user
+    await connection.query(
       'INSERT INTO users (name, email, password, user_type) VALUES (?, ?, ?, ?)',
-      [name, email, password, userType]
+      [name, email, password, 'student']
     );
     
     connection.release();
@@ -155,8 +248,9 @@ app.post('/api/auth/register', async (req, res) => {
     res.json({
       success: true,
       message: 'User registered successfully',
-      userId: result.insertId
+      data: { name, email, userType: 'student' }
     });
+    
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -166,82 +260,25 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Get institutes
-app.get('/api/institutes', async (req, res) => {
-  try {
-    const connection = await pool.getConnection();
-    const [institutes] = await connection.query('SELECT * FROM institutes');
-    connection.release();
-    
-    res.json({
-      success: true,
-      data: institutes
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch institutes'
-    });
-  }
-});
-
-// Apply to course
-app.post('/api/applications/apply', async (req, res) => {
-  const { studentId, courseId } = req.body;
-  
-  try {
-    const connection = await pool.getConnection();
-    
-    const [result] = await connection.query(
-      'INSERT INTO applications (student_id, course_id) VALUES (?, ?)',
-      [studentId, courseId]
-    );
-    
-    connection.release();
-    
-    res.json({
-      success: true,
-      message: 'Application submitted',
-      applicationId: result.insertId
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Application failed'
-    });
-  }
-});
-
-// ============================================
-// FRONTEND ROUTE (MUST BE LAST)
-// ============================================
-app.get('*', (req, res) => {
-  if (req.originalUrl.startsWith('/api/')) {
-    return res.status(404).json({
-      success: false,
-      message: `API endpoint ${req.method} ${req.originalUrl} not found`
-    });
-  }
-  
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
-
-// ============================================
-// START SERVER
-// ============================================
-const startServer = async () => {
-  // Initialize database first
-  await initializeDatabase();
-  
-  const PORT = process.env.PORT || 8080;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n✅ Server running on port ${PORT}`);
-    console.log(`📍 Host: 0.0.0.0`);
-    console.log(`🌐 Public URL: https://sincere-forgiveness-production.up.railway.app`);
-    console.log(`🏥 API Health: https://sincere-forgiveness-production.up.railway.app/api/health`);
-    console.log(`📱 Frontend: https://sincere-forgiveness-production.up.railway.app/`);
-    console.log(`🎓 Career Guidance Platform - READY! 🚀`);
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Career Guidance API - Debug Version',
+    version: '1.0.0',
+    endpoints: [
+      'GET  /api/health - Health check with DB status',
+      'GET  /api/debug/db - Show database tables',
+      'POST /api/debug/register - Test registration'
+    ]
   });
-};
+});
 
-startServer().catch(console.error);
+// Start server
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n✅ Server running on port ${PORT}`);
+  console.log(`📍 Host: 0.0.0.0`);
+  console.log(`🌐 External URL: https://sincere-forgiveness-production.up.railway.app`);
+  console.log(`🏥 Health: https://sincere-forgiveness-production.up.railway.app/api/health`);
+  console.log(`🔧 Debug: https://sincere-forgiveness-production.up.railway.app/api/debug/db`);
+});
