@@ -99,8 +99,8 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Handle preflight
-app.options('*', cors());
+// REMOVE THIS LINE COMPLETELY:
+// app.options(cors());  // ❌ DELETE THIS
 
 // ============================================
 // AUTHENTICATION MIDDLEWARE
@@ -137,7 +137,6 @@ const auth = async (req, res, next) => {
     });
   }
 };
-
 // ============================================
 // AUTH ROUTES
 // ============================================
