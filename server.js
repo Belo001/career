@@ -3,15 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import mysql from 'mysql2/promise';
-import bcrypt from 'bcryptjs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 
 const app = express();
-
-// Get current directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // ============================================
 // DATABASE CONNECTION
@@ -29,17 +22,85 @@ const dbConfig = {
 
 const pool = mysql.createPool(dbConfig);
 
+// Initialize database with sample data
+const initializeDatabase = async () => {
+  console.log('🔧 Initializing database with sample data...');
+  
+  try {
+    const connection = await pool.getConnection();
+    
+    // Check if we have any data
+    const [users] = await connection.query('SELECT COUNT(*) as count FROM users');
+    
+    if (users[0].count === 0) {
+      console.log('📊 Adding sample data...');
+      
+      // Add sample users
+      await connection.query(`
+        INSERT INTO users (name, email, password, user_type, is_verified) VALUES
+        ('Admin User', 'admin@careerguide.com', 'admin123', 'admin', 1),
+        ('Tech University', 'tech@university.com', 'password123', 'institute', 1),
+        ('John Student', 'john@student.com', 'password123', 'student', 1),
+        ('Sarah Applicant', 'sarah@student.com', 'password123', 'student', 1)
+      `);
+      
+      // Add sample institute
+      await connection.query(`
+        INSERT INTO institutes (user_id, name, description, location, contact_email, contact_phone, website, established_year, total_students, address) VALUES
+        (2, 'Tech University', 'Premier technology and engineering institute', 'New York', 'info@techuni.edu', '+1-555-0100', 'https://techuni.edu', 1985, 15000, '123 Tech Avenue, NY 10001')
+      `);
+      
+      // Add sample faculties
+      await connection.query(`
+        INSERT INTO faculties (institute_id, name, description, dean_name, contact_email, contact_phone, established_year) VALUES
+        (1, 'Faculty of Engineering', 'Engineering and technology programs', 'Dr. John Smith', 'engineering@techuni.edu', '+1-555-0101', 1985),
+        (1, 'Faculty of Computer Science', 'Computer science and IT programs', 'Dr. Sarah Johnson', 'cs@techuni.edu', '+1-555-0102', 1995),
+        (1, 'Faculty of Business', 'Business and management programs', 'Dr. Michael Brown', 'business@techuni.edu', '+1-555-0103', 1990)
+      `);
+      
+      // Add sample courses
+      await connection.query(`
+        INSERT INTO courses (faculty_id, name, code, description, duration, duration_unit, requirements, fees, intake_capacity, application_deadline, is_active) VALUES
+        (1, 'Computer Science', 'CS101', 'Bachelor of Computer Science', 4, 'years', '{"minGrade": "B", "requiredSubjects": ["Mathematics"]}', '{"domestic": 5000, "international": 15000}', 100, '2024-12-31', 1),
+        (1, 'Electrical Engineering', 'EE201', 'Bachelor of Electrical Engineering', 4, 'years', '{"minGrade": "B-", "requiredSubjects": ["Mathematics", "Physics"]}', '{"domestic": 5500, "international": 16000}', 80, '2024-12-31', 1),
+        (2, 'Business Administration', 'BA301', 'Bachelor of Business Administration', 3, 'years', '{"minGrade": "C+", "requiredSubjects": ["Mathematics", "English"]}', '{"domestic": 4500, "international": 12000}', 120, '2024-11-30', 1),
+        (3, 'Mechanical Engineering', 'ME401', 'Bachelor of Mechanical Engineering', 4, 'years', '{"minGrade": "B-", "requiredSubjects": ["Mathematics", "Physics"]}', '{"domestic": 5200, "international": 15500}', 60, '2024-12-31', 1)
+      `);
+      
+      // Add sample students
+      await connection.query(`
+        INSERT INTO students (user_id, high_school, graduation_year, grades) VALUES
+        (3, 'New York High School', 2023, '{"mathematics": "A", "physics": "B+", "english": "A-"}'),
+        (4, 'Boston High School', 2023, '{"mathematics": "B+", "physics": "A", "english": "B"}')
+      `);
+      
+      console.log('✅ Sample data added successfully!');
+    } else {
+      console.log(`✅ Database already has ${users[0].count} users`);
+    }
+    
+    connection.release();
+  } catch (error) {
+    console.log('⚠️ Database initialization:', error.message);
+  }
+};
+
 // ============================================
 // MIDDLEWARE
 // ============================================
 app.use(helmet());
-app.use(cors({ origin: '*', credentials: true }));
+app.use(cors({
+  origin: '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-User-Id']
+}));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files (for future frontend)
-app.use(express.static(path.join(__dirname, 'public')));
+// Handle preflight
+app.options('*', cors());
 
 // ============================================
 // AUTHENTICATION MIDDLEWARE
@@ -77,23 +138,11 @@ const auth = async (req, res, next) => {
   }
 };
 
-const requireRole = (roles) => {
-  return (req, res, next) => {
-    if (!roles.includes(req.user.user_type)) {
-      return res.status(403).json({
-        success: false,
-        message: 'Insufficient permissions'
-      });
-    }
-    next();
-  };
-};
-
 // ============================================
 // AUTH ROUTES
 // ============================================
 
-// Register
+// Register - SIMPLIFIED (no password hashing for testing)
 app.post('/api/auth/register', async (req, res) => {
   try {
     const { name, email, password, userType } = req.body;
@@ -106,23 +155,13 @@ app.post('/api/auth/register', async (req, res) => {
       });
     }
 
-    if (!['student', 'institute'].includes(userType)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid user type'
-      });
-    }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create user
+    // Create user (plain password for testing)
     const [result] = await pool.execute(
       'INSERT INTO users (name, email, password, user_type) VALUES (?, ?, ?, ?)',
-      [name, email, hashedPassword, userType]
+      [name, email, password, userType]
     );
 
-    // Create profile based on user type
+    // Create profile
     if (userType === 'student') {
       await pool.execute(
         'INSERT INTO students (user_id) VALUES (?)',
@@ -156,37 +195,37 @@ app.post('/api/auth/register', async (req, res) => {
     
     res.status(500).json({
       success: false,
-      message: 'Registration failed'
+      message: 'Registration failed',
+      error: error.message
     });
   }
 });
 
-// Login
+// Login - SIMPLIFIED
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password, userType } = req.body;
 
     // Find user
     const [users] = await pool.execute(
-      'SELECT id, name, email, password, user_type, is_verified FROM users WHERE email = ? AND user_type = ?',
+      'SELECT id, name, email, password, user_type FROM users WHERE email = ? AND user_type = ?',
       [email, userType]
     );
 
     if (users.length === 0) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid email or user type'
       });
     }
 
     const user = users[0];
 
-    // Check password
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
+    // Check password (plain text comparison for testing)
+    if (password !== user.password) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials'
+        message: 'Invalid password'
       });
     }
 
@@ -197,8 +236,7 @@ app.post('/api/auth/login', async (req, res) => {
         userId: user.id,
         name: user.name,
         email: user.email,
-        userType: user.user_type,
-        isVerified: user.is_verified
+        userType: user.user_type
       }
     });
 
@@ -210,51 +248,15 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Get current user
-app.get('/api/auth/me', auth, async (req, res) => {
-  try {
-    // Get profile based on user type
-    let profile = null;
-    
-    if (req.user.user_type === 'student') {
-      const [students] = await pool.execute(
-        'SELECT * FROM students WHERE user_id = ?',
-        [req.user.id]
-      );
-      profile = students[0];
-    } else if (req.user.user_type === 'institute') {
-      const [institutes] = await pool.execute(
-        'SELECT * FROM institutes WHERE user_id = ?',
-        [req.user.id]
-      );
-      profile = institutes[0];
-    }
-
-    res.json({
-      success: true,
-      data: {
-        user: req.user,
-        profile
-      }
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch profile'
-    });
-  }
-});
-
 // ============================================
 // INSTITUTE ROUTES
 // ============================================
 
-// Get all institutes (public)
+// Get all institutes
 app.get('/api/institutes', async (req, res) => {
   try {
     const [institutes] = await pool.execute(
-      'SELECT i.*, u.email as contact_email FROM institutes i JOIN users u ON i.user_id = u.id'
+      'SELECT id, name, description, location, contact_email, contact_phone, website, established_year, total_students FROM institutes'
     );
 
     res.json({
@@ -270,32 +272,56 @@ app.get('/api/institutes', async (req, res) => {
   }
 });
 
-// Get institute by ID (public)
-app.get('/api/institutes/:id', async (req, res) => {
+// Get institute courses
+app.get('/api/institutes/:id/courses', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const [institutes] = await pool.execute(
-      'SELECT i.*, u.email as contact_email FROM institutes i JOIN users u ON i.user_id = u.id WHERE i.id = ?',
+    const [courses] = await pool.execute(
+      `SELECT c.*, f.name as faculty_name 
+       FROM courses c 
+       JOIN faculties f ON c.faculty_id = f.id 
+       WHERE f.institute_id = ? AND c.is_active = TRUE`,
       [id]
     );
 
-    if (institutes.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Institute not found'
-      });
-    }
-
     res.json({
       success: true,
-      data: institutes[0]
+      data: courses
     });
 
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch institute'
+      message: 'Failed to fetch courses'
+    });
+  }
+});
+
+// ============================================
+// COURSE ROUTES
+// ============================================
+
+// Get all courses
+app.get('/api/courses', async (req, res) => {
+  try {
+    const [courses] = await pool.execute(
+      `SELECT c.*, f.name as faculty_name, i.name as institute_name 
+       FROM courses c 
+       JOIN faculties f ON c.faculty_id = f.id 
+       JOIN institutes i ON f.institute_id = i.id 
+       WHERE c.is_active = TRUE`
+    );
+
+    res.json({
+      success: true,
+      data: courses
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch courses'
     });
   }
 });
@@ -305,55 +331,35 @@ app.get('/api/institutes/:id', async (req, res) => {
 // ============================================
 
 // Apply to course
-app.post('/api/applications/apply', auth, requireRole(['student']), async (req, res) => {
-  const connection = await pool.getConnection();
+app.post('/api/applications/apply', auth, async (req, res) => {
   try {
-    await connection.beginTransaction();
-
-    const studentId = req.user.id;
     const { courseId, preferredMajor, personalStatement } = req.body;
+    const studentId = req.user.id;
 
-    // Get course details
-    const [courses] = await connection.execute(
+    // Get course
+    const [courses] = await pool.execute(
       `SELECT c.*, i.id as institute_id 
        FROM courses c 
        JOIN faculties f ON c.faculty_id = f.id 
        JOIN institutes i ON f.institute_id = i.id 
-       WHERE c.id = ? AND c.is_active = TRUE`,
+       WHERE c.id = ?`,
       [courseId]
     );
 
     if (courses.length === 0) {
       return res.status(404).json({
         success: false,
-        message: 'Course not found or inactive'
-      });
-    }
-
-    const course = courses[0];
-
-    // Check if already applied
-    const [existingApps] = await connection.execute(
-      'SELECT id FROM applications WHERE student_id = ? AND course_id = ?',
-      [studentId, courseId]
-    );
-
-    if (existingApps.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Already applied to this course'
+        message: 'Course not found'
       });
     }
 
     // Create application
-    const [result] = await connection.execute(
+    const [result] = await pool.execute(
       `INSERT INTO applications 
-       (student_id, course_id, institute_id, preferred_major, personal_statement, status) 
-       VALUES (?, ?, ?, ?, ?, 'pending')`,
-      [studentId, courseId, course.institute_id, preferredMajor, personalStatement]
+       (student_id, course_id, institute_id, preferred_major, personal_statement) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [studentId, courseId, courses[0].institute_id, preferredMajor, personalStatement]
     );
-
-    await connection.commit();
 
     res.status(201).json({
       success: true,
@@ -365,38 +371,9 @@ app.post('/api/applications/apply', auth, requireRole(['student']), async (req, 
     });
 
   } catch (error) {
-    await connection.rollback();
     res.status(500).json({
       success: false,
       message: 'Failed to submit application'
-    });
-  } finally {
-    connection.release();
-  }
-});
-
-// Get student applications
-app.get('/api/applications/student', auth, requireRole(['student']), async (req, res) => {
-  try {
-    const [applications] = await pool.execute(
-      `SELECT a.*, c.name as course_name, c.code as course_code, i.name as institute_name 
-       FROM applications a 
-       JOIN courses c ON a.course_id = c.id 
-       JOIN institutes i ON a.institute_id = i.id 
-       WHERE a.student_id = ? 
-       ORDER BY a.application_date DESC`,
-      [req.user.id]
-    );
-
-    res.json({
-      success: true,
-      data: applications
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch applications'
     });
   }
 });
@@ -408,7 +385,11 @@ app.get('/api/applications/student', auth, requireRole(['student']), async (req,
 app.get('/api/health', async (req, res) => {
   try {
     const [tables] = await pool.execute('SHOW TABLES');
-    
+    const [users] = await pool.execute('SELECT COUNT(*) as users FROM users');
+    const [institutes] = await pool.execute('SELECT COUNT(*) as institutes FROM institutes');
+    const [courses] = await pool.execute('SELECT COUNT(*) as courses FROM courses WHERE is_active = TRUE');
+    const [applications] = await pool.execute('SELECT COUNT(*) as applications FROM applications');
+
     res.json({
       status: 'OK',
       message: 'Career Guidance Platform API',
@@ -416,18 +397,12 @@ app.get('/api/health', async (req, res) => {
       database: {
         status: 'connected',
         tables: tables.length,
-        url: 'mysql.railway.internal:3306/railway'
+        users: users[0].users,
+        institutes: institutes[0].institutes,
+        courses: courses[0].courses,
+        applications: applications[0].applications
       },
-      version: '1.0.0',
-      endpoints: [
-        'POST /api/auth/register',
-        'POST /api/auth/login',
-        'GET  /api/auth/me',
-        'GET  /api/institutes',
-        'GET  /api/institutes/:id',
-        'POST /api/applications/apply',
-        'GET  /api/applications/student'
-      ]
+      version: '1.0.0'
     });
   } catch (error) {
     res.json({
@@ -442,6 +417,34 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Get sample data for testing
+app.get('/api/sample-data', async (req, res) => {
+  try {
+    const [users] = await pool.execute('SELECT id, name, email, user_type FROM users LIMIT 5');
+    const [institutes] = await pool.execute('SELECT id, name, location FROM institutes LIMIT 3');
+    const [courses] = await pool.execute('SELECT id, name, code FROM courses WHERE is_active = TRUE LIMIT 5');
+
+    res.json({
+      success: true,
+      data: {
+        users,
+        institutes,
+        courses,
+        testCredentials: {
+          admin: { email: 'admin@careerguide.com', password: 'admin123', userType: 'admin' },
+          institute: { email: 'tech@university.com', password: 'password123', userType: 'institute' },
+          student: { email: 'john@student.com', password: 'password123', userType: 'student' }
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch sample data'
+    });
+  }
+});
+
 // Root route
 app.get('/', (req, res) => {
   res.json({
@@ -449,17 +452,26 @@ app.get('/', (req, res) => {
     version: '1.0.0',
     status: 'operational',
     database: 'connected',
-    documentation: 'Visit /api/health for API details',
-    github: 'https://github.com/your-repo',
-    endpoints: [
-      'GET  /api/health',
-      'POST /api/auth/register',
-      'POST /api/auth/login',
-      'GET  /api/auth/me',
-      'GET  /api/institutes',
-      'GET  /api/institutes/:id',
-      'POST /api/applications/apply',
-      'GET  /api/applications/student'
+    endpoints: {
+      auth: {
+        register: 'POST /api/auth/register',
+        login: 'POST /api/auth/login'
+      },
+      institutes: {
+        list: 'GET /api/institutes',
+        courses: 'GET /api/institutes/:id/courses'
+      },
+      courses: 'GET /api/courses',
+      applications: 'POST /api/applications/apply',
+      info: {
+        health: 'GET /api/health',
+        sampleData: 'GET /api/sample-data'
+      }
+    },
+    testUsers: [
+      { email: 'admin@careerguide.com', password: 'admin123', type: 'admin' },
+      { email: 'tech@university.com', password: 'password123', type: 'institute' },
+      { email: 'john@student.com', password: 'password123', type: 'student' }
     ]
   });
 });
@@ -472,13 +484,13 @@ app.use((req, res) => {
     availableRoutes: [
       'GET  /',
       'GET  /api/health',
+      'GET  /api/sample-data',
       'POST /api/auth/register',
       'POST /api/auth/login',
-      'GET  /api/auth/me',
       'GET  /api/institutes',
-      'GET  /api/institutes/:id',
-      'POST /api/applications/apply',
-      'GET  /api/applications/student'
+      'GET  /api/institutes/:id/courses',
+      'GET  /api/courses',
+      'POST /api/applications/apply'
     ]
   });
 });
@@ -488,32 +500,44 @@ app.use((error, req, res, next) => {
   console.error('Error:', error);
   res.status(500).json({
     success: false,
-    message: 'Internal server error'
+    message: 'Internal server error',
+    error: error.message
   });
 });
 
 // ============================================
 // START SERVER
 // ============================================
-const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
+const startServer = async () => {
+  // Initialize database with sample data
+  await initializeDatabase();
+  
+  const PORT = process.env.PORT || 8080;
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`
 🎓 CAREER GUIDANCE PLATFORM - PRODUCTION READY 🚀
 ✅ Server running on port ${PORT}
 📍 Host: 0.0.0.0
 🌐 Public URL: https://sincere-forgiveness-production.up.railway.app
 🏥 Health: https://sincere-forgiveness-production.up.railway.app/api/health
-📊 Database: Connected with 8 tables
+📊 Sample Data: https://sincere-forgiveness-production.up.railway.app/api/sample-data
+
+📋 SAMPLE CREDENTIALS FOR TESTING:
+  👤 Admin:     admin@careerguide.com / admin123
+  🏛️  Institute: tech@university.com / password123  
+  🎓 Student:   john@student.com / password123
 
 AVAILABLE ENDPOINTS:
   POST /api/auth/register    - Register new user
   POST /api/auth/login       - Login user
-  GET  /api/auth/me          - Get user profile (auth required)
   GET  /api/institutes       - List all institutes
-  GET  /api/institutes/:id   - Get institute details
-  POST /api/applications/apply - Apply to course (student auth)
-  GET  /api/applications/student - Get student applications (student auth)
+  GET  /api/institutes/:id/courses - Get institute courses
+  GET  /api/courses          - List all active courses
+  POST /api/applications/apply - Apply to course (auth required)
 
-Ready for frontend connection! 🎉
-  `);
-});
+Ready for frontend testing! 🎉
+    `);
+  });
+};
+
+startServer().catch(console.error);
