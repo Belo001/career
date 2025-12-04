@@ -30,12 +30,28 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Configure CORS for Railway - SIMPLIFIED VERSION
 const allowedOrigins = [
+  // Local development
   'http://localhost:3000',
   'http://localhost:5174', 
   'http://localhost:5173', 
   'http://127.0.0.1:5174',  
-  '127.0.0.1:5173',
-  'https://career-production-e5fa.up.railway.app' // Add your React app URL here
+  'http://127.0.0.1:5173',
+  
+  // Netlify domains
+  'https://heroic-kangaroo-1e051f.netlify.app',
+  'http://heroic-kangaroo-1e051f.netlify.app',
+  'https://*.netlify.app',  // Allow ALL Netlify sites
+  'http://*.netlify.app',
+  
+  // Render domains
+  'https://career-frontend-jpyc.onrender.com',
+  'http://career-frontend-jpyc.onrender.com',
+  'https://*.onrender.com',  // Allow ALL Render sites
+  'http://*.onrender.com',
+  
+  // Your backend
+  'https://career-production-e5fa.up.railway.app',
+  'http://career-production-e5fa.up.railway.app',
 ];
 
 // Add Railway domains if they exist
@@ -60,11 +76,26 @@ app.use(helmet());
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
+    
+    // Check exact match
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
-      console.warn('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+      // Check wildcard match (like *.netlify.app)
+      const isWildcardMatch = allowedOrigins.some(allowedOrigin => {
+        if (allowedOrigin.includes('*')) {
+          const regex = new RegExp('^' + allowedOrigin.replace('*', '.*') + '$');
+          return regex.test(origin);
+        }
+        return false;
+      });
+      
+      if (isWildcardMatch) {
+        callback(null, true);
+      } else {
+        console.warn('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
     }
   },
   credentials: true,
@@ -73,6 +104,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
