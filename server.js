@@ -2,8 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { config } from 'dotenv';
 config();
 
@@ -18,24 +16,15 @@ import adminRoutes from './routes/admin.js';
 
 const app = express();
 
-// Get current directory (ES modules fix)
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // Middleware
-app.use(helmet({
-  contentSecurityPolicy: false // Disable for now to avoid frontend issues
-}));
+app.use(helmet());
 app.use(cors({
-  origin: '*', // Allow all
+  origin: '*',
   credentials: true
 }));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
-
-// Serve static files from 'public' directory
-app.use(express.static(path.join(__dirname, 'public')));
 
 // Test database connection
 testConnection().then(() => {
@@ -44,49 +33,83 @@ testConnection().then(() => {
   console.log('⚠️ Database check completed');
 });
 
-// API Routes
+// Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/institutes', instituteRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/applications', applicationRoutes);
 app.use('/api/admin', adminRoutes);
 
-// API Health check
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
-    message: 'Career Guidance Platform API',
+    message: 'Career Guidance API is running',
     timestamp: new Date().toISOString(),
     database: 'connected',
     version: '1.0.0'
   });
 });
 
-// API Test endpoint
+// Test route
 app.get('/api/test', (req, res) => {
   res.json({ 
     success: true,
-    message: 'All API routes are working!',
+    message: 'All routes are working!',
     data: { 
       version: '1.0.0',
       environment: 'production',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      routes: [
+        { path: '/api/health', method: 'GET', description: 'Health check' },
+        { path: '/api/auth', methods: ['POST', 'GET'], description: 'Authentication' },
+        { path: '/api/institutes', methods: ['GET', 'POST', 'PUT'], description: 'Institute management' },
+        { path: '/api/students', methods: ['GET', 'PUT'], description: 'Student profiles' },
+        { path: '/api/applications', methods: ['GET', 'POST', 'PUT', 'DELETE'], description: 'Applications' },
+        { path: '/api/admin', methods: ['GET', 'PUT'], description: 'Admin functions' }
+      ]
     }
   });
 });
 
-// Serve frontend - Catch-all route (MUST BE LAST)
-app.get('*', (req, res) => {
-  // Don't serve frontend for API routes
-  if (req.originalUrl.startsWith('/api/')) {
-    return res.status(404).json({
-      success: false,
-      message: `API endpoint ${req.method} ${req.originalUrl} not found`
-    });
-  }
-  
-  // Serve the frontend HTML
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Career Guidance Platform API',
+    version: '1.0.0',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    endpoints: [
+      '/api/health',
+      '/api/auth',
+      '/api/institutes',
+      '/api/students',
+      '/api/applications',
+      '/api/admin',
+      '/api/test'
+    ]
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: `Route ${req.method} ${req.originalUrl} not found`,
+    availableRoutes: [
+      'GET  /',
+      'GET  /api/health',
+      'GET  /api/test',
+      'POST /api/auth/register',
+      'POST /api/auth/login',
+      'GET  /api/auth/me',
+      'GET  /api/institutes',
+      'GET  /api/institutes/:id',
+      'GET  /api/students/profile',
+      'POST /api/applications/apply',
+      'GET  /api/admin/stats'
+    ]
+  });
 });
 
 // Error handler
@@ -102,8 +125,6 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server running on port ${PORT}`);
   console.log(`📍 Host: 0.0.0.0`);
-  console.log(`🌐 Public URL: https://sincere-forgiveness-production.up.railway.app`);
-  console.log(`🏥 API Health: https://sincere-forgiveness-production.up.railway.app/api/health`);
-  console.log(`📱 Frontend: https://sincere-forgiveness-production.up.railway.app/`);
-  console.log(`📁 Serving from: ${__dirname}/public`);
+  console.log(`🌐 URL: http://localhost:${PORT}`);
+  console.log(`🏥 Health: http://localhost:${PORT}/api/health`);
 });
