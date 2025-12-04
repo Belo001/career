@@ -35,7 +35,7 @@ const allowedOrigins = [
   'http://localhost:5173', 
   'http://127.0.0.1:5174',  
   '127.0.0.1:5173',
-  'https://your-react-app.railway.app' // Add your React app URL here
+  'https://career-production-e5fa.up.railway.app' // Add your React app URL here
 ];
 
 // Add Railway domains if they exist
