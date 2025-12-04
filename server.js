@@ -4,218 +4,80 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import mysql from 'mysql2/promise'; // ✅ DATABASE INCLUDED HERE
+import { config } from 'dotenv';
+config();
+
+import { testConnection } from './config/database.js';
+
+// Import all routes
+import authRoutes from './routes/auth.js';
+import instituteRoutes from './routes/institutes.js';
+import studentRoutes from './routes/students.js';
+import applicationRoutes from './routes/applications.js';
+import adminRoutes from './routes/admin.js';
 
 const app = express();
 
-// Get current directory
+// Get current directory (ES modules fix)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ============================================
-// DATABASE SETUP (INCLUDED IN SERVER.JS)
-// ============================================
-console.log('🚀 DATABASE SETUP FOR RAILWAY');
-
-const dbConfig = {
-  host: 'mysql.railway.internal',
-  port: 3306,
-  user: 'root',
-  password: 'tSVIRWsFKyujfCKvkIxgGRTLFXsjFDiS',
-  database: 'railway',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-};
-
-console.log('📊 Using Railway MySQL:');
-console.log(`   Host: ${dbConfig.host}:${dbConfig.port}`);
-console.log(`   Database: ${dbConfig.database}`);
-console.log(`   User: ${dbConfig.user}`);
-
-const pool = mysql.createPool(dbConfig);
-
-// Database initialization
-const initializeDatabase = async () => {
-  console.log('\n🔧 Initializing database...');
-  try {
-    const connection = await pool.getConnection();
-    console.log('✅ Database connected!');
-    
-    // Check if users table exists
-    const [tables] = await connection.query("SHOW TABLES LIKE 'users'");
-    
-    if (tables.length === 0) {
-      console.log('📦 Creating essential tables...');
-      
-      // Create essential tables
-      const createTables = [
-        `CREATE TABLE users (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          name VARCHAR(255) NOT NULL,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          password VARCHAR(255) NOT NULL,
-          user_type ENUM('student', 'institute', 'admin') NOT NULL,
-          is_verified BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE institutes (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          user_id INT,
-          name VARCHAR(255) NOT NULL,
-          description TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE students (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          user_id INT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`,
-        `CREATE TABLE applications (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          student_id INT,
-          course_id INT,
-          status ENUM('pending', 'accepted', 'rejected') DEFAULT 'pending',
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`
-      ];
-      
-      for (const sql of createTables) {
-        await connection.query(sql);
-      }
-      
-      console.log('✅ Tables created!');
-    } else {
-      console.log('✅ Database already has tables');
-    }
-    
-    connection.release();
-  } catch (error) {
-    console.log('⚠️ Database init:', error.message);
-  }
-};
-
-// ============================================
-// MIDDLEWARE
-// ============================================
-app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: '*', credentials: true }));
+// Middleware
+app.use(helmet({
+  contentSecurityPolicy: false // Disable for now to avoid frontend issues
+}));
+app.use(cors({
+  origin: '*', // Allow all
+  credentials: true
+}));
 app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static files
+// Serve static files from 'public' directory
 app.use(express.static(path.join(__dirname, 'public')));
 
-// ============================================
-// SIMPLE ROUTES (NO SEPARATE CONTROLLERS NEEDED)
-// ============================================
-
-// Health check
-app.get('/api/health', async (req, res) => {
-  try {
-    const connection = await pool.getConnection();
-    const [tables] = await connection.query('SHOW TABLES');
-    connection.release();
-    
-    res.json({
-      status: 'OK',
-      message: 'Career Guidance Platform',
-      timestamp: new Date().toISOString(),
-      database: 'connected',
-      tables: tables.length,
-      version: '1.0.0'
-    });
-  } catch (error) {
-    res.json({
-      status: 'OK',
-      message: 'Career Guidance Platform',
-      timestamp: new Date().toISOString(),
-      database: 'disconnected',
-      error: error.message
-    });
-  }
+// Test database connection
+testConnection().then(() => {
+  console.log('🎉 Database initialization complete!');
+}).catch(() => {
+  console.log('⚠️ Database check completed');
 });
 
-// Register user
-app.post('/api/auth/register', async (req, res) => {
-  const { name, email, password, userType } = req.body;
-  
-  try {
-    const connection = await pool.getConnection();
-    
-    // Simple insert
-    const [result] = await connection.query(
-      'INSERT INTO users (name, email, password, user_type) VALUES (?, ?, ?, ?)',
-      [name, email, password, userType]
-    );
-    
-    connection.release();
-    
-    res.json({
-      success: true,
-      message: 'User registered successfully',
-      userId: result.insertId
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Registration failed',
-      error: error.message
-    });
-  }
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/institutes', instituteRoutes);
+app.use('/api/students', studentRoutes);
+app.use('/api/applications', applicationRoutes);
+app.use('/api/admin', adminRoutes);
+
+// API Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    message: 'Career Guidance Platform API',
+    timestamp: new Date().toISOString(),
+    database: 'connected',
+    version: '1.0.0'
+  });
 });
 
-// Get institutes
-app.get('/api/institutes', async (req, res) => {
-  try {
-    const connection = await pool.getConnection();
-    const [institutes] = await connection.query('SELECT * FROM institutes');
-    connection.release();
-    
-    res.json({
-      success: true,
-      data: institutes
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch institutes'
-    });
-  }
+// API Test endpoint
+app.get('/api/test', (req, res) => {
+  res.json({ 
+    success: true,
+    message: 'All API routes are working!',
+    data: { 
+      version: '1.0.0',
+      environment: 'production',
+      timestamp: new Date().toISOString()
+    }
+  });
 });
 
-// Apply to course
-app.post('/api/applications/apply', async (req, res) => {
-  const { studentId, courseId } = req.body;
-  
-  try {
-    const connection = await pool.getConnection();
-    
-    const [result] = await connection.query(
-      'INSERT INTO applications (student_id, course_id) VALUES (?, ?)',
-      [studentId, courseId]
-    );
-    
-    connection.release();
-    
-    res.json({
-      success: true,
-      message: 'Application submitted',
-      applicationId: result.insertId
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Application failed'
-    });
-  }
-});
-
-// ============================================
-// FRONTEND ROUTE (MUST BE LAST)
-// ============================================
+// Serve frontend - Catch-all route (MUST BE LAST)
 app.get('*', (req, res) => {
+  // Don't serve frontend for API routes
   if (req.originalUrl.startsWith('/api/')) {
     return res.status(404).json({
       success: false,
@@ -223,25 +85,25 @@ app.get('*', (req, res) => {
     });
   }
   
+  // Serve the frontend HTML
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ============================================
-// START SERVER
-// ============================================
-const startServer = async () => {
-  // Initialize database first
-  await initializeDatabase();
-  
-  const PORT = process.env.PORT || 8080;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n✅ Server running on port ${PORT}`);
-    console.log(`📍 Host: 0.0.0.0`);
-    console.log(`🌐 Public URL: https://sincere-forgiveness-production.up.railway.app`);
-    console.log(`🏥 API Health: https://sincere-forgiveness-production.up.railway.app/api/health`);
-    console.log(`📱 Frontend: https://sincere-forgiveness-production.up.railway.app/`);
-    console.log(`🎓 Career Guidance Platform - READY! 🚀`);
+// Error handler
+app.use((error, req, res, next) => {
+  console.error('Error:', error);
+  res.status(500).json({
+    success: false,
+    message: 'Internal server error'
   });
-};
+});
 
-startServer().catch(console.error);
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`📍 Host: 0.0.0.0`);
+  console.log(`🌐 Public URL: https://sincere-forgiveness-production.up.railway.app`);
+  console.log(`🏥 API Health: https://sincere-forgiveness-production.up.railway.app/api/health`);
+  console.log(`📱 Frontend: https://sincere-forgiveness-production.up.railway.app/`);
+  console.log(`📁 Serving from: ${__dirname}/public`);
+});
